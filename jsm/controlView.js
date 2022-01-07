@@ -159,7 +159,7 @@ class ControlView  extends THREE.EventDispatcher{
         this.loadTfFile = function (text) {
             
             let output = text.replace('\r', ' ').replace('\n', ' ').replace(/\s\s+/g, ' ').split(' ')
-            console.log(output)
+            
             for (let i = 0; i < 256; i++) {
                 arg.path[i] = parseInt(output[4 * i])
                 arg.rgba[0][i] = parseFloat(output[4 * i + 1])

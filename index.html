@@ -418,6 +418,7 @@
                     volume.data.forEach((d, i) => arr[i] = d/255);
                     volume.data = arr;
 
+                    controlView.updateVolumeData(new ScaleField(...volume.size.toArray(), data, arg.rgba))
                     createMesh(volume);
                 }
             }

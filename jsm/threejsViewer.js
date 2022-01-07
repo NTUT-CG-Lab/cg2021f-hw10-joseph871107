@@ -87,7 +87,7 @@ class threejsViewer {
             }
         }
 
-        //¥Ñ¼v¹³¸ê®Æ¥Í¦¨¼Ò«¬
+        //ï¿½Ñ¼vï¿½ï¿½ï¿½ï¿½Æ¥Í¦ï¿½ï¿½Ò«ï¿½
         this.renderVolume = function (volume, colormap, arg) {
 
             const name = 'volume'

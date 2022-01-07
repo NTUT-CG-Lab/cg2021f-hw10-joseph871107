@@ -130,16 +130,16 @@
         <!--內容-->
         <div class="panelContent open">
             <div class="settingForm">
-                <label class="btnLabel noDisplay"><input type="file" name="settingForm" accept=".raw">load .raw</label>
-                <label class="btnLabel noDisplay"><input type="file" name="settingForm" accept=".tf">load .tf</label>
+                <label class="btnLabel"><input type="file" name="settingForm" accept=".raw">load .raw</label>
+                <label class="btnLabel"><input type="file" name="settingForm" accept=".tf">load .tf</label>
                 <label class="btnLabel noDisplay"><input type="file" name="settingForm" accept=".sbdat">load .sbdat</label>
                 <label class="btnLabel noDisplay" name="settingForm">sized based</label>
-                <label class="btnLabel noDisplay" name="settingForm">save .tf</label>
+                <label class="btnLabel" name="settingForm">save .tf</label>
                 <label class="btnLabel noDisplay" name="settingForm">save .sbdat</label>
             </div>
             <div class="radioSpace">
-                <label><input type="radio" name="rtype" value="mips" checked>MIPS</label>
-                <label><input type="radio" name="rtype" value="iso">ISO</label>
+                <label><input type="radio" name="rtype" value="mips">MIPS</label>
+                <label><input type="radio" name="rtype" value="iso" checked>ISO</label>
             </div>
             <div id="palette"></div>
         </div>
@@ -151,7 +151,7 @@
     <script src="js/scoreoutputer.min.js"></script>
     <script>
         // 建構子 ScoreOutputer 接受一個字串，該字串為 csv 的檔案名稱
-        var so = new ScoreOutputer("109114514");
+        var so = new ScoreOutputer("110598005");
         so.installCSS(function () {
             // 安裝 bootstrap 的 css，如果在 html 上方引用 bootstrap 5.1.1 的話就不用使用 installCSS ，注意一定要 bootstrap css 5.1.1 版
             // installCSS 接收一個 callback 當作參數，作為成功安裝 bootstrap css 的回呼函式
@@ -165,7 +165,7 @@
             so.addChild("讀取文件並顯示資訊", 4, true);
             so.addChild("使用直接法渲染影像(MIPS)", 2, true);
             so.addChild("使用直接法渲染影像(ISO)", 2, true);
-            so.addChild("使用調色盤變更材質的colormap", 2, false);
+            so.addChild("使用調色盤變更材質的colormap", 2, true);
 
             //產生自評表，參數如下所示
             so.renderModal(
@@ -197,14 +197,18 @@
     </script>
     <script type="module">
 
+        import * as THREE from "./threejs/build/three.module.js";
         import { ScaleField, Gaussian } from './jsm/scaleField.js'
         import { threejsViewer } from './jsm/threejsViewer.js'
         import { ControlView, colorSetting } from './jsm/controlView.js'
+        import { VolumeRenderShader1 } from './jsm/VolumeShader.js';
 
-        const fileRegex = /(\w+)_(\d+)_(\d+)_(\d+)_(\w+)\.*/;
+        const fileRegex = /(\w+)_(\d+)_(\d+)_(\d+)_(\w+)\.(\w+)/;
 
         let field, controlView, modelView = null
         let arg = new colorSetting()
+        
+        var material, volume;
 
         let getColormap = function () {
             let color = new Uint8ClampedArray(256 * 4)
@@ -326,15 +330,147 @@
 
             //MIPS or ISO
             document.querySelectorAll('input[name=rtype]').forEach((option) => {
-                option.addEventListener('click', (evt) => { })
-            })
+                option.addEventListener('click', (evt) => {
+                    var value = evt.target.value;
+                    arg.renderType = value == 'mips' ? 0 : 1;
+                    updateUniforms();
+                })
+            });
 
-            arg.renderType = 0
+            var createMesh = (volume) => {
+                var object = modelView.scene.getObjectByName( "mesh" );
+                if (object)
+                    modelView.scene.remove(object);
+
+                const texture = new THREE.DataTexture3D( volume.data, ...volume.size.toArray() );
+				texture.format = THREE.RedFormat;
+				texture.type = THREE.FloatType;
+				texture.minFilter = texture.magFilter = THREE.LinearFilter;
+				// texture.unpackAlignment = 1;
+				// texture.needsUpdate = true;
+                
+                const shader = VolumeRenderShader1;
+                
+                material = new THREE.ShaderMaterial({
+                    uniforms: {
+                        'u_data': { value: texture },
+                        'u_size': { value: volume.size.clone() },
+                        'u_clim': { value: new THREE.Vector2(arg.cli_min, arg.cli_max) },
+                        'u_renderstyle': { value: arg.renderType },
+                        'u_renderthreshold': { value: arg.isovalue },
+                        'u_sizeEnable': { value: 0 },
+                        'u_sizeData': { value: null },
+                        "u_cmdata": { value: null },
+                    },
+					vertexShader: shader.vertexShader,
+					fragmentShader: shader.fragmentShader,
+					side: THREE.BackSide,
+                });
+                updateUniforms();
+
+				// THREE.Mesh
+				const geometry = new THREE.BoxGeometry(...volume.size.toArray());
+				geometry.translate( volume.xLength / 2, volume.yLength / 2, volume.zLength / 2 );
+                const mesh = new THREE.Mesh( geometry, material );
+
+                var bbox = new THREE.Box3().setFromObject(mesh);
+                var sz = bbox.max.clone().sub(bbox.min.clone());
+                var mx = Math.max(...sz.toArray());
+
+                var scale = 1/mx;
+                mesh.scale.set(scale, scale, scale);
+                mesh.name = 'mesh';
+
+                var bbox = new THREE.Box3().setFromObject(mesh);
+                var sz = bbox.max.clone().sub(bbox.min.clone());
+                var ps = bbox.max.clone().add(bbox.min.clone()).multiplyScalar(0.5);
+                ps.y = bbox.min.y;
+                mesh.position.copy(mesh.position.clone().sub(ps.clone()).add(new THREE.Vector3(0, 0.1, 0)));
+
+				modelView.scene.add( mesh );
+                updateUniforms();
+            }
+
+            arg.renderType = 1;
 
             // RAW文件讀取
-            loadLocalRawFile('./raw/CTchest_64_64_64_uint8.raw', (result) => {
+            var loadFile2Mesh = (path, data) => {
+                var filename = path.split('/').pop();
+                var regResult = filename.match(fileRegex);
+                
+                if (regResult.length == 7 && regResult[6] == 'raw'){
+                    var cfg = {
+                        'x': parseInt(regResult[2]),
+                        'y': parseInt(regResult[3]),
+                        'z': parseInt(regResult[4]),
+                        'bit': regResult[5],
+                    };
 
-            })
+                    volume = {
+                        data: bitConvertor(cfg.bit, data),
+                        xLength: cfg.x,
+                        yLength: cfg.y,
+                        zLength: cfg.z,
+                    };
+                    volume.size = new THREE.Vector3(volume.xLength, volume.yLength, volume.zLength);
+
+                    var arr = new Float32Array(volume.xLength * volume.yLength * volume.zLength);
+                    volume.data.forEach((d, i) => arr[i] = d/255);
+                    volume.data = arr;
+
+                    createMesh(volume);
+                }
+            }
+
+            var filepath = './raw/bonsai_256_256_256_uint8.raw';
+            loadLocalRawFile(filepath, (result) => {
+                loadFile2Mesh(filepath, result);
+            });
+
+            // Custom RAW Loader
+            var labels = document.querySelectorAll('.btnLabel');
+            labels[0].children[0].addEventListener('change', (e) => {
+                if (e.target.files.length > 0){
+                    var file = e.target.files[0];
+
+                    var reader = new FileReader();
+
+                    reader.addEventListener("load", function () {
+                        loadFile2Mesh(file.name, reader.result);
+                    }, false);
+
+                    reader.readAsArrayBuffer(file);
+                }
+            });
+            
+            // Load .tf
+            labels[1].children[0].addEventListener('change', (e) => {
+                if (e.target.files.length > 0){
+                    var file = e.target.files[0];
+
+                    var reader = new FileReader();
+
+                    reader.addEventListener("load", function () {
+                        controlView.loadTfFile(reader.result);
+                    }, false);
+
+                    reader.readAsText(file);
+                }
+            });
+            
+            // Save .tf
+            labels[4].addEventListener('click', (e) => {
+                var output = controlView.exportTfFile();
+                console.log(output);
+
+                const blob = new Blob([output], {type: 'text/txt'});
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = 'test.tf';
+                a.click();
+            });
         }
 
         window.onload = () => {
@@ -342,9 +478,24 @@
             controlView = new ControlView(document.getElementById('palette'), arg)
 
             //當調色盤的參數變更時，觸發事件
-            controlView.addEventListener('change', () => {})
+            controlView.addEventListener('change', () => { updateUniforms(); })
 
             init()
+        }
+
+        var updateUniforms = () => {
+            if (material){
+                material.uniforms[ "u_clim" ].value.set( arg.cli_min, arg.cli_max );
+                material.uniforms[ "u_renderstyle" ].value = arg.renderType;
+                material.uniforms[ "u_renderthreshold" ].value = arg.isovalue;
+                material.uniforms["u_cmdata"].value = new THREE.DataTexture(getColormap(), 255, 1);
+            }
+
+            render();
+        }
+
+        var render = () => {
+            modelView.renderScene();
         }
     </script>
 

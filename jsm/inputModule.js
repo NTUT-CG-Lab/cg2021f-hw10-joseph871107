@@ -67,7 +67,7 @@ class InputModule {
 			arg.mylist.push(t);
 		}
 
-		// ½Õ¦â½üÀË´ú
+		// ï¿½Õ¦ï¿½ï¿½ï¿½Ë´ï¿½
 		let wheelDetection = function (x1, y1, central_x, central_y, radius_ex, radius_in) {
 			let distance = Math.sqrt(Math.pow((x1 - central_x), 2.0) + Math.pow((y1 - central_y), 2.0));
 			if (distance >= radius_in && distance <= radius_ex) {
@@ -79,7 +79,7 @@ class InputModule {
 			}
 		}
 
-		// ½Õ¦â½L(¤T¨¤)ÀË´ú
+		// ï¿½Õ¦ï¿½L(ï¿½Tï¿½ï¿½)ï¿½Ë´ï¿½
 		let triangleDetection = function (x1, y1, central_x, central_y, radius) {
 			let a_x = central_x + (radius * Math.sin(240.0 / 57.29577957795135));
 			let a_y = central_y + (radius * Math.cos(240.0 / 57.29577957795135));
@@ -173,7 +173,7 @@ class InputModule {
 		}
 
 		this.interpolation = function(x_old, y_old, x, y){
-			console.log("old(%d, %d), new(%d, %d)\n", x_old, y_old, x, y);
+			// console.log("old(%d, %d), new(%d, %d)\n", x_old, y_old, x, y);
 			if (x_old == x) {
 				arg.path[x_old] = y_old;
 				if (arg.path[x_old] > 179)
